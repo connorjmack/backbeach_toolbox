@@ -5,3 +5,4 @@ geopandas
 shapely
 rasterio
 pyproj
+pytest
