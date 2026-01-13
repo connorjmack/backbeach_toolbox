@@ -119,7 +119,9 @@ def extract_dem_list(mat_data):
         name = _to_py_str(name).strip()
         if not folder:
             return _normalize_dem_path(name)
-        joined = f"{folder.rstrip('/\\\\')}/{name.lstrip('/\\\\')}"
+        folder_clean = folder.rstrip("/\\")
+        name_clean = name.lstrip("/\\")
+        joined = f"{folder_clean}/{name_clean}"
         return _normalize_dem_path(joined)
 
     def _expand_columnar(item):

@@ -60,6 +60,22 @@ def test_extract_dem_list_struct_array_darwin(monkeypatch):
     assert paths[0].startswith("/Volumes/group/")
 
 
+def test_extract_dem_list_join_paths():
+    dem_full = np.array(
+        [
+            FakeStruct(
+                name="/dem3.tif",
+                folder="/data/dems/",
+                dates_num=730488.0,
+            ),
+        ],
+        dtype=object,
+    )
+    dem_list = FakeStruct(FULL=dem_full)
+    _, paths = bbf.extract_dem_list({"DEM_list_Corrected": dem_list})
+    assert paths[0].endswith("data/dems/dem3.tif")
+
+
 def test_resolve_transect_column_indices():
     ids_zero = list(range(5))
     ids_one = list(range(1, 6))
