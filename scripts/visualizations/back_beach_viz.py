@@ -326,7 +326,12 @@ def main():
 
     col_indices = _resolve_transect_column_indices(transect_ids, cliff_east.shape[1])
     if col_indices is None:
-        raise ValueError("Transect IDs do not map to cliff toe columns. Check ID field and ordering.")
+        if cliff_east.shape[1] != len(transect_geoms):
+            raise ValueError(
+                "Transect IDs do not map to cliff toe columns and counts do not match. "
+                f"Cliff columns: {cliff_east.shape[1]}, Transects: {len(transect_geoms)}"
+            )
+        col_indices = list(range(len(transect_geoms)))
 
     bounds = gdf.total_bounds
     gif_path = os.path.join(args.output_dir, args.gif_name)
