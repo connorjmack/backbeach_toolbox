@@ -43,17 +43,21 @@ def _mean_alongshore(width_matrix):
     arr = np.asarray(width_matrix)
     if arr.ndim != 2:
         raise ValueError(f"Width matrix must be 2-D (time x transect). Got shape {arr.shape}")
-    return np.nanmean(arr, axis=1)
+    finite = np.isfinite(arr)
+    count = finite.sum(axis=1)
+    summed = np.where(finite, arr, 0.0).sum(axis=1)
+    return np.divide(summed, count, out=np.full(arr.shape[0], np.nan), where=count > 0)
 
 
 def _plot_violin(ax, values, title, color, show_ylabel):
-    values = np.asarray(values).astype(float)
-    if values.size == 0:
-        raise ValueError("No values available to plot")
+    values = np.asarray(values, dtype=float)
+    finite_values = values[np.isfinite(values)]
+    if finite_values.size == 0:
+        raise ValueError("No finite values available to plot")
 
     center = 0.0
     violin = ax.violinplot(
-        values,
+        finite_values,
         positions=[center],
         widths=0.7,
         showmeans=True,
@@ -74,13 +78,19 @@ def _plot_violin(ax, values, title, color, show_ylabel):
 
     # Jitter points give a sense of distribution without hiding the violin.
     rng = np.random.default_rng(0)
-    jitter = center + rng.normal(loc=0.0, scale=0.04, size=values.size)
-    ax.scatter(jitter, values, color="#2f2f2f", s=10, alpha=0.6, linewidth=0.3)
+    jitter = center + rng.normal(loc=0.0, scale=0.04, size=finite_values.size)
+    ax.scatter(jitter, finite_values, color="#2f2f2f", s=10, alpha=0.6, linewidth=0.3)
+
+    mean_val = float(np.nanmean(finite_values))
+    median_val = float(np.nanmedian(finite_values))
+    xmin, xmax = center - 0.9, center + 0.9
+    ax.axhline(mean_val, xmin=0.05, xmax=0.95, color=color, linestyle="--", linewidth=1.8, alpha=0.9)
+    ax.axhline(median_val, xmin=0.05, xmax=0.95, color="#2f2f2f", linestyle="-", linewidth=2.0, alpha=0.95)
 
     ax.set_title(title)
     ax.set_xticks([])
     ax.grid(axis="y", linestyle="--", alpha=0.35)
-    ax.set_xlim(center - 0.9, center + 0.9)
+    ax.set_xlim(xmin, xmax)
     if show_ylabel:
         ax.set_ylabel("Alongshore-averaged beach width (m)")
 
