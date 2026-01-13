@@ -265,6 +265,27 @@ def _point_from_xy(xy):
     return Point(xy[0], xy[1])
 
 
+def _resolve_transect_column_indices(transect_ids, n_columns):
+    ids = np.asarray(transect_ids)
+    try:
+        ids_num = ids.astype(float)
+    except Exception:
+        return None
+    if np.isnan(ids_num).any():
+        return None
+    ids_int = ids_num.astype(int)
+    if np.any(np.abs(ids_num - ids_int) > 1e-6):
+        return None
+
+    min_id = int(ids_int.min())
+    max_id = int(ids_int.max())
+    if min_id == 0 and max_id == n_columns - 1:
+        return ids_int.tolist()
+    if min_id == 1 and max_id == n_columns:
+        return (ids_int - 1).tolist()
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compute beach widths from DEMs, tides, and cliff toe data.")
     parser.add_argument(
@@ -353,7 +374,7 @@ def main():
     if args.transect_id_field:
         transect_ids = transects_gdf[args.transect_id_field].tolist()
     else:
-        id_field_candidates = ["ID", "Id", "TransectID", "TRANSECTID", "transect_id", "fid"]
+        id_field_candidates = ["Id", "ID", "TransectID", "TRANSECTID", "transect_id", "fid"]
         id_field = next((f for f in id_field_candidates if f in transects_gdf.columns), None)
         transect_ids = transects_gdf[id_field].tolist() if id_field else list(range(len(transects_gdf)))
 
@@ -386,22 +407,29 @@ def main():
             else:
                 transects = transects_gdf
 
-            if cliff_east.shape[1] != len(transects):
-                raise ValueError(
-                    "Cliff toe alongshore count does not match transect count. "
-                    f"Cliff: {cliff_east.shape[1]}, Transects: {len(transects)}"
-                )
+            col_indices = _resolve_transect_column_indices(transect_ids, cliff_east.shape[1])
+            if col_indices is None:
+                if cliff_east.shape[1] != len(transects):
+                    raise ValueError(
+                        "Cliff toe alongshore count does not match transect count and "
+                        "transect IDs do not map to cliff columns. "
+                        f"Cliff: {cliff_east.shape[1]}, Transects: {len(transects)}"
+                    )
+                col_indices = list(range(len(transects)))
 
             for tran_idx, (tran_id, geom) in enumerate(zip(transect_ids, transects.geometry)):
                 if geom is None:
+                    continue
+                col_idx = col_indices[tran_idx]
+                if col_idx < 0 or col_idx >= cliff_east.shape[1]:
                     continue
                 xs, ys, _ = sample_transect(geom, args.spacing_m)
                 samples = np.array([val[0] for val in ds.sample(zip(xs, ys))], dtype=float)
                 if ds.nodata is not None:
                     samples[samples == ds.nodata] = np.nan
 
-                cliff_x = cliff_east[survey_idx, tran_idx]
-                cliff_y = cliff_north[survey_idx, tran_idx]
+                cliff_x = cliff_east[survey_idx, col_idx]
+                cliff_y = cliff_north[survey_idx, col_idx]
                 if not np.isfinite(cliff_x) or not np.isfinite(cliff_y):
                     continue
 
