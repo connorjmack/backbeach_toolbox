@@ -1,0 +1,12 @@
+name: backbeach_toolbox
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scipy
+  - geopandas
+  - shapely
+  - rasterio
+  - pyproj
