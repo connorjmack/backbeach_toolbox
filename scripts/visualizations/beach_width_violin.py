@@ -51,20 +51,36 @@ def _plot_violin(ax, values, title, color, show_ylabel):
     if values.size == 0:
         raise ValueError("No values available to plot")
 
-    violin = ax.violinplot(values, showmeans=True, showextrema=False, widths=0.6)
+    center = 0.0
+    violin = ax.violinplot(
+        values,
+        positions=[center],
+        widths=0.7,
+        showmeans=True,
+        showmedians=True,
+        showextrema=False,
+    )
     for body in violin["bodies"]:
         body.set_facecolor(color)
-        body.set_alpha(0.6)
-        body.set_edgecolor("none")
-    violin["cmeans"].set_color("#2f2f2f")
+        body.set_alpha(0.35)
+        body.set_edgecolor(color)
+        body.set_linewidth(1.2)
+    if "cmeans" in violin:
+        violin["cmeans"].set_color(color)
+        violin["cmeans"].set_linewidth(2.2)
+    if "cmedians" in violin:
+        violin["cmedians"].set_color("#2f2f2f")
+        violin["cmedians"].set_linewidth(2.2)
 
+    # Jitter points give a sense of distribution without hiding the violin.
     rng = np.random.default_rng(0)
-    jitter = rng.normal(loc=0.0, scale=0.04, size=values.size)
+    jitter = center + rng.normal(loc=0.0, scale=0.04, size=values.size)
     ax.scatter(jitter, values, color="#2f2f2f", s=10, alpha=0.6, linewidth=0.3)
 
     ax.set_title(title)
     ax.set_xticks([])
     ax.grid(axis="y", linestyle="--", alpha=0.35)
+    ax.set_xlim(center - 0.9, center + 0.9)
     if show_ylabel:
         ax.set_ylabel("Alongshore-averaged beach width (m)")
 
