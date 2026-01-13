@@ -6,12 +6,12 @@ Plot violin plots of alongshore-averaged beach width across all surveys.
 import argparse
 import os
 
-import numpy as np
-
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 
 
 def _load_widths(path):
@@ -19,10 +19,9 @@ def _load_widths(path):
         with np.load(path, allow_pickle=True) as data:
             try:
                 width_along = np.asarray(data["width_along_transect_m"])
-                width_euclid = np.asarray(data["width_euclid_m"])
             except KeyError as exc:
                 raise KeyError(
-                    "Input file must contain width_along_transect_m and width_euclid_m arrays"
+                    "Input file must contain width_along_transect_m"
                 ) from exc
     elif path.lower().endswith(".mat"):
         try:
@@ -30,13 +29,12 @@ def _load_widths(path):
         except Exception as exc:
             raise RuntimeError("scipy is required to read .mat files. Install with: pip install scipy") from exc
         mat = loadmat(path, squeeze_me=True, struct_as_record=False)
-        if "width_along_transect_m" not in mat or "width_euclid_m" not in mat:
-            raise KeyError("MAT file missing width matrices: width_along_transect_m and width_euclid_m")
+        if "width_along_transect_m" not in mat:
+            raise KeyError("MAT file missing width_along_transect_m")
         width_along = np.asarray(mat["width_along_transect_m"])
-        width_euclid = np.asarray(mat["width_euclid_m"])
     else:
         raise ValueError("Input must be a .npz or .mat file")
-    return width_along, width_euclid
+    return width_along
 
 
 def _mean_alongshore(width_matrix):
@@ -46,7 +44,7 @@ def _mean_alongshore(width_matrix):
     finite = np.isfinite(arr)
     count = finite.sum(axis=1)
     summed = np.where(finite, arr, 0.0).sum(axis=1)
-    return np.divide(summed, count, out=np.full(arr.shape[0], np.nan), where=count > 0)
+    return np.divide(summed, count, out=np.full(arr.shape[0], np.nan), where=count > 0, dtype=float)
 
 
 def _plot_violin(ax, values, title, color, show_ylabel):
@@ -55,49 +53,48 @@ def _plot_violin(ax, values, title, color, show_ylabel):
     if finite_values.size == 0:
         raise ValueError("No finite values available to plot")
 
-    center = 0.0
-    violin = ax.violinplot(
-        finite_values,
-        positions=[center],
-        widths=0.7,
-        showmeans=True,
-        showmedians=True,
-        showextrema=False,
+    sns.violinplot(
+        y=finite_values,
+        ax=ax,
+        inner=None,
+        color=color,
+        linewidth=1.2,
+        cut=0,
+        saturation=0.9,
+        width=0.5,
     )
-    for body in violin["bodies"]:
-        body.set_facecolor(color)
-        body.set_alpha(0.35)
-        body.set_edgecolor(color)
-        body.set_linewidth(1.2)
-    if "cmeans" in violin:
-        violin["cmeans"].set_color(color)
-        violin["cmeans"].set_linewidth(2.2)
-    if "cmedians" in violin:
-        violin["cmedians"].set_color("#2f2f2f")
-        violin["cmedians"].set_linewidth(2.2)
-
-    # Jitter points give a sense of distribution without hiding the violin.
-    rng = np.random.default_rng(0)
-    jitter = center + rng.normal(loc=0.0, scale=0.04, size=finite_values.size)
-    ax.scatter(jitter, finite_values, color="#2f2f2f", s=10, alpha=0.6, linewidth=0.3)
+    sns.stripplot(
+        y=finite_values,
+        ax=ax,
+        color="#2f2f2f",
+        size=4.5,
+        alpha=0.4,
+        jitter=0.12,
+        linewidth=0,
+    )
 
     mean_val = float(np.nanmean(finite_values))
     median_val = float(np.nanmedian(finite_values))
-    xmin, xmax = center - 0.9, center + 0.9
-    ax.axhline(mean_val, xmin=0.05, xmax=0.95, color=color, linestyle="--", linewidth=1.8, alpha=0.9)
-    ax.axhline(median_val, xmin=0.05, xmax=0.95, color="#2f2f2f", linestyle="-", linewidth=2.0, alpha=0.95)
+    ax.axhline(mean_val, color=color, linestyle="--", linewidth=2.0, alpha=0.9, label=f"Mean: {mean_val:.2f} m")
+    ax.axhline(median_val, color="#222222", linestyle="-", linewidth=2.2, alpha=0.95, label=f"Median: {median_val:.2f} m")
 
-    ax.set_title(title)
+    ax.set_title(title, pad=10, fontweight="semibold")
     ax.set_xticks([])
+    ax.set_xlabel("")
     ax.grid(axis="y", linestyle="--", alpha=0.35)
-    ax.set_xlim(xmin, xmax)
     if show_ylabel:
         ax.set_ylabel("Alongshore-averaged beach width (m)")
+    else:
+        ax.set_ylabel("")
+    ax.legend(frameon=False, loc="lower right")
+    ymin, ymax = np.nanpercentile(finite_values, [1, 99])
+    pad = (ymax - ymin) * 0.08 if np.isfinite(ymax - ymin) else 1.0
+    ax.set_ylim(ymin - pad, ymax + pad)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Plot violin plots of alongshore-averaged back beach width for each survey."
+        description="Plot a publication-ready violin plot of alongshore-averaged back beach width."
     )
     parser.add_argument(
         "--input",
@@ -112,7 +109,7 @@ def parse_args():
     parser.add_argument(
         "--dpi",
         type=int,
-        default=300,
+        default=400,
         help="DPI for the saved figure",
     )
     return parser.parse_args()
@@ -123,16 +120,16 @@ def main():
     if not os.path.exists(args.input):
         raise FileNotFoundError(f"Input file not found: {args.input}")
 
-    width_along, width_euclid = _load_widths(args.input)
+    sns.set_theme(style="whitegrid", context="talk")
+
+    width_along = _load_widths(args.input)
     along_means = _mean_alongshore(width_along)
-    euclid_means = _mean_alongshore(width_euclid)
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5), dpi=args.dpi, sharey=True)
-    _plot_violin(axes[0], along_means, "Along-transect width", "#1f77b4", show_ylabel=True)
-    _plot_violin(axes[1], euclid_means, "Euclidean width", "#d95f02", show_ylabel=False)
+    fig, ax = plt.subplots(figsize=(6, 7.5), dpi=args.dpi)
+    _plot_violin(ax, along_means, "Along-transect back beach width", "#1f77b4", show_ylabel=True)
 
-    fig.suptitle("Alongshore-averaged back beach width across surveys")
-    fig.tight_layout()
+    fig.suptitle("Alongshore-averaged back beach width (all surveys)", y=0.98, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
 
     output_dir = os.path.dirname(args.output) or "."
     os.makedirs(output_dir, exist_ok=True)

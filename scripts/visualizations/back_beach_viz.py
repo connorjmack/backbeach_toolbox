@@ -43,12 +43,20 @@ def _as_str_list(arr):
 
 
 def _load_results(path):
+    width_signed = None
+    tide_east = None
+    tide_north = None
     if path.lower().endswith(".npz"):
         with np.load(path, allow_pickle=True) as data:
             width_along = data["width_along_transect_m"]
             width_euclid = data["width_euclid_m"]
             survey_dates = _as_str_list(data["survey_dates"])
             transect_ids = np.asarray(data["transect_ids"]).tolist()
+            if "width_along_transect_signed_m" in data:
+                width_signed = np.asarray(data["width_along_transect_signed_m"])
+            if "tide_line_east_m" in data and "tide_line_north_m" in data:
+                tide_east = np.asarray(data["tide_line_east_m"])
+                tide_north = np.asarray(data["tide_line_north_m"])
     elif path.lower().endswith(".mat"):
         try:
             from scipy.io import loadmat
@@ -59,11 +67,19 @@ def _load_results(path):
         width_euclid = np.asarray(data["width_euclid_m"])
         survey_dates = _as_str_list(data["survey_dates"])
         transect_ids = np.asarray(data["transect_ids"]).tolist()
+        width_signed = data.get("width_along_transect_signed_m")
+        if width_signed is not None:
+            width_signed = np.asarray(width_signed)
+        tide_east = data.get("tide_line_east_m")
+        tide_north = data.get("tide_line_north_m")
+        if tide_east is not None and tide_north is not None:
+            tide_east = np.asarray(tide_east)
+            tide_north = np.asarray(tide_north)
     else:
         raise ValueError("Input must be a .npz or .mat file")
 
     survey_dt = [datetime.fromisoformat(d) for d in survey_dates]
-    return width_along, width_euclid, survey_dt, transect_ids
+    return width_along, width_euclid, survey_dt, transect_ids, width_signed, tide_east, tide_north
 
 
 def _load_cliff_toe(mat_path):
@@ -97,6 +113,11 @@ def _resolve_transect_column_indices(transect_ids, n_columns):
         return ids_int.tolist()
     if min_id == 1 and max_id == n_columns:
         return (ids_int - 1).tolist()
+    unique_sorted = np.unique(ids_int)
+    if unique_sorted.size == n_columns:
+        diffs = np.diff(np.sort(unique_sorted))
+        if np.all(diffs == 1):
+            return (ids_int - unique_sorted.min()).tolist()
     return None
 
 
@@ -114,6 +135,18 @@ def _order_transects(gdf, transect_ids, id_field):
     return [mapping.get(tid) for tid in transect_ids]
 
 
+def _sort_by_numeric_id(transect_ids, geoms, col_indices):
+    try:
+        ids_num = np.asarray(transect_ids, dtype=float)
+    except Exception:
+        return transect_ids, geoms, col_indices
+    order = np.argsort(ids_num, kind="stable")
+    transect_ids_sorted = [transect_ids[i] for i in order]
+    geoms_sorted = [geoms[i] for i in order]
+    col_sorted = [col_indices[i] for i in order]
+    return transect_ids_sorted, geoms_sorted, col_sorted
+
+
 def _tide_point_from_width(line, cliff_point, width, direction="auto"):
     if line is None or cliff_point is None:
         return None
@@ -123,23 +156,30 @@ def _tide_point_from_width(line, cliff_point, width, direction="auto"):
     if length <= 0:
         return None
     s_cliff = line.project(cliff_point)
-    if direction == "toward-start":
-        s_tide = s_cliff - width
-    elif direction == "toward-end":
+    if direction == "signed":
         s_tide = s_cliff + width
     else:
-        toward_end = (length - s_cliff) >= s_cliff
-        s_tide = s_cliff + width if toward_end else s_cliff - width
+        width = abs(width)
+        if direction == "toward-start":
+            s_tide = s_cliff - width
+        elif direction == "toward-end":
+            s_tide = s_cliff + width
+        else:
+            toward_end = (length - s_cliff) >= s_cliff
+            s_tide = s_cliff + width if toward_end else s_cliff - width
     s_tide = max(0.0, min(length, s_tide))
     return line.interpolate(s_tide)
 
 
 def _make_gif(
     width_along,
+    width_signed,
     survey_dates,
     transect_geoms,
     cliff_east,
     cliff_north,
+    tide_east,
+    tide_north,
     col_indices,
     output_path,
     bounds,
@@ -152,6 +192,14 @@ def _make_gif(
     x_min, y_min, x_max, y_max = bounds
     pad_x = (x_max - x_min) * 0.02
     pad_y = (y_max - y_min) * 0.02
+
+    use_signed = width_signed is not None and np.shape(width_signed) == np.shape(width_along)
+    use_tide_xy = (
+        tide_east is not None
+        and tide_north is not None
+        and np.shape(tide_east) == np.shape(width_along)
+        and np.shape(tide_north) == np.shape(width_along)
+    )
 
     with imageio.get_writer(output_path, mode="I", duration=1 / fps) as writer:
         for idx in range(0, len(survey_dates), frame_step):
@@ -187,15 +235,30 @@ def _make_gif(
                     cliff_y.append(np.nan)
                     continue
                 cliff_point = Point(cx, cy)
-                tide_point = _tide_point_from_width(
-                    geom, cliff_point, width_along[idx, col_idx], direction=tide_direction
-                )
-                if tide_point is None:
-                    tide_x.append(np.nan)
-                    tide_y.append(np.nan)
+                if use_tide_xy:
+                    tx = tide_east[idx, col_idx]
+                    ty = tide_north[idx, col_idx]
+                    if not np.isfinite(tx) or not np.isfinite(ty):
+                        tide_x.append(np.nan)
+                        tide_y.append(np.nan)
+                    else:
+                        tide_x.append(tx)
+                        tide_y.append(ty)
                 else:
-                    tide_x.append(tide_point.x)
-                    tide_y.append(tide_point.y)
+                    if use_signed:
+                        tide_point = _tide_point_from_width(
+                            geom, cliff_point, width_signed[idx, col_idx], direction="signed"
+                        )
+                    else:
+                        tide_point = _tide_point_from_width(
+                            geom, cliff_point, width_along[idx, col_idx], direction=tide_direction
+                        )
+                    if tide_point is None:
+                        tide_x.append(np.nan)
+                        tide_y.append(np.nan)
+                    else:
+                        tide_x.append(tide_point.x)
+                        tide_y.append(tide_point.y)
                 cliff_x.append(cx)
                 cliff_y.append(cy)
 
@@ -314,7 +377,15 @@ def main():
     )
     args = parser.parse_args()
 
-    width_along, width_euclid, survey_dates, transect_ids = _load_results(args.input)
+    (
+        width_along,
+        width_euclid,
+        survey_dates,
+        transect_ids,
+        width_signed,
+        tide_east,
+        tide_north,
+    ) = _load_results(args.input)
     cliff_east, cliff_north = _load_cliff_toe(args.mat_file)
 
     gdf = gpd.read_file(args.transects)
@@ -332,15 +403,20 @@ def main():
             )
         col_indices = list(range(len(transect_geoms)))
 
+    transect_ids, transect_geoms, col_indices = _sort_by_numeric_id(transect_ids, transect_geoms, col_indices)
+
     bounds = gdf.total_bounds
     gif_path = os.path.join(args.output_dir, args.gif_name)
     print(f"Writing GIF to {gif_path}")
     _make_gif(
         width_along,
+        width_signed,
         survey_dates,
         transect_geoms,
         cliff_east,
         cliff_north,
+        tide_east,
+        tide_north,
         col_indices,
         gif_path,
         bounds=bounds,

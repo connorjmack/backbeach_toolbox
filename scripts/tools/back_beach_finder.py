@@ -285,7 +285,26 @@ def _resolve_transect_column_indices(transect_ids, n_columns):
         return ids_int.tolist()
     if min_id == 1 and max_id == n_columns:
         return (ids_int - 1).tolist()
+
+    unique_sorted = np.unique(ids_int)
+    if unique_sorted.size == n_columns:
+        diffs = np.diff(np.sort(unique_sorted))
+        if np.all(diffs == 1):
+            return (ids_int - unique_sorted.min()).tolist()
+
     return None
+
+
+def _sort_transects_by_numeric_id(transect_ids, geoms):
+    try:
+        ids_num = np.asarray(transect_ids, dtype=float)
+    except Exception:
+        order = list(range(len(transect_ids)))
+        return transect_ids, geoms, order
+    order = np.argsort(ids_num, kind="stable")
+    ids_sorted = [transect_ids[i] for i in order]
+    geoms_sorted = [geoms[i] for i in order]
+    return ids_sorted, geoms_sorted, order.tolist()
 
 
 def main():
@@ -390,8 +409,16 @@ def main():
         id_field = next((f for f in id_field_candidates if f in transects_gdf.columns), None)
         transect_ids = transects_gdf[id_field].tolist() if id_field else list(range(len(transects_gdf)))
 
+    transect_ids, transect_geoms_sorted, sort_order = _sort_transects_by_numeric_id(
+        transect_ids, list(transects_gdf.geometry)
+    )
+    transects_gdf_sorted = transects_gdf.iloc[sort_order].reset_index(drop=True)
+
     width_along = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
+    width_along_signed = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
     width_euclid = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
+    tide_line_east = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
+    tide_line_north = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
 
     dem_base = args.dem_base_dir or os.path.dirname(os.path.abspath(args.mat_file))
 
@@ -420,10 +447,10 @@ def main():
 
         with rasterio.open(dem_path) as ds:
             dem_crs = ds.crs
-            if dem_crs and transects_gdf.crs and transects_gdf.crs != dem_crs:
-                transects = transects_gdf.to_crs(dem_crs)
+            if dem_crs and transects_gdf_sorted.crs and transects_gdf_sorted.crs != dem_crs:
+                transects = transects_gdf_sorted.to_crs(dem_crs)
             else:
-                transects = transects_gdf
+                transects = transects_gdf_sorted
 
             col_indices = _resolve_transect_column_indices(transect_ids, cliff_east.shape[1])
             if col_indices is None:
@@ -457,11 +484,17 @@ def main():
                     continue
 
                 cross_point = _point_from_xy(cross)
-                width_along_val = abs(geom.project(cross_point) - geom.project(cliff_point))
+                s_cliff = geom.project(cliff_point)
+                s_cross = geom.project(cross_point)
+                signed_width = s_cross - s_cliff
+                width_along_val = abs(signed_width)
                 width_euclid_val = np.hypot(cross[0] - cliff_x, cross[1] - cliff_y)
 
                 width_along[survey_idx, col_idx] = width_along_val
+                width_along_signed[survey_idx, col_idx] = signed_width
                 width_euclid[survey_idx, col_idx] = width_euclid_val
+                tide_line_east[survey_idx, col_idx] = cross[0]
+                tide_line_north[survey_idx, col_idx] = cross[1]
 
     if np.isnan(width_along).all() and np.isnan(width_euclid).all():
         raise RuntimeError("No beach widths were computed. Check inputs and parameters.")
@@ -470,7 +503,10 @@ def main():
     np.savez(
         args.output_npz,
         width_along_transect_m=width_along,
+        width_along_transect_signed_m=width_along_signed,
         width_euclid_m=width_euclid,
+        tide_line_east_m=tide_line_east,
+        tide_line_north_m=tide_line_north,
         survey_dates=np.array([d.date().isoformat() for d in survey_dates]),
         transect_ids=np.asarray(transect_ids),
     )
@@ -486,7 +522,10 @@ def main():
         args.output_mat,
         {
             "width_along_transect_m": width_along,
+            "width_along_transect_signed_m": width_along_signed,
             "width_euclid_m": width_euclid,
+            "tide_line_east_m": tide_line_east,
+            "tide_line_north_m": tide_line_north,
             "survey_dates": np.array([d.date().isoformat() for d in survey_dates], dtype=object),
             "transect_ids": np.asarray(transect_ids),
         },
