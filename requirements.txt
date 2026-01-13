@@ -6,3 +6,5 @@ shapely
 rasterio
 pyproj
 pytest
+matplotlib
+imageio

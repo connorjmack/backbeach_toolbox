@@ -11,3 +11,5 @@ dependencies:
   - rasterio
   - pyproj
   - pytest
+  - matplotlib
+  - imageio
