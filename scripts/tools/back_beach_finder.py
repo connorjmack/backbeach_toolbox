@@ -295,18 +295,6 @@ def _resolve_transect_column_indices(transect_ids, n_columns):
     return None
 
 
-def _sort_transects_by_numeric_id(transect_ids, geoms):
-    try:
-        ids_num = np.asarray(transect_ids, dtype=float)
-    except Exception:
-        order = list(range(len(transect_ids)))
-        return transect_ids, geoms, order
-    order = np.argsort(ids_num, kind="stable")
-    ids_sorted = [transect_ids[i] for i in order]
-    geoms_sorted = [geoms[i] for i in order]
-    return ids_sorted, geoms_sorted, order.tolist()
-
-
 def main():
     parser = argparse.ArgumentParser(description="Compute beach widths from DEMs, tides, and cliff toe data.")
     parser.add_argument(
@@ -409,11 +397,6 @@ def main():
         id_field = next((f for f in id_field_candidates if f in transects_gdf.columns), None)
         transect_ids = transects_gdf[id_field].tolist() if id_field else list(range(len(transects_gdf)))
 
-    transect_ids, transect_geoms_sorted, sort_order = _sort_transects_by_numeric_id(
-        transect_ids, list(transects_gdf.geometry)
-    )
-    transects_gdf_sorted = transects_gdf.iloc[sort_order].reset_index(drop=True)
-
     width_along = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
     width_along_signed = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
     width_euclid = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
@@ -447,10 +430,10 @@ def main():
 
         with rasterio.open(dem_path) as ds:
             dem_crs = ds.crs
-            if dem_crs and transects_gdf_sorted.crs and transects_gdf_sorted.crs != dem_crs:
-                transects = transects_gdf_sorted.to_crs(dem_crs)
+            if dem_crs and transects_gdf.crs and transects_gdf.crs != dem_crs:
+                transects = transects_gdf.to_crs(dem_crs)
             else:
-                transects = transects_gdf_sorted
+                transects = transects_gdf
 
             col_indices = _resolve_transect_column_indices(transect_ids, cliff_east.shape[1])
             if col_indices is None:
