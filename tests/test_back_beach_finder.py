@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "back_beach_finder.py"
+MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "tools" / "back_beach_finder.py"
 spec = importlib.util.spec_from_file_location("back_beach_finder", MODULE_PATH)
 bbf = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bbf)
@@ -81,4 +81,5 @@ def test_resolve_transect_column_indices():
     ids_one = list(range(1, 6))
     assert bbf._resolve_transect_column_indices(ids_zero, 5) == ids_zero
     assert bbf._resolve_transect_column_indices(ids_one, 5) == [0, 1, 2, 3, 4]
-    assert bbf._resolve_transect_column_indices([10, 11], 5) is None
+    assert bbf._resolve_transect_column_indices([10, 11], 2) == [0, 1]
+    assert bbf._resolve_transect_column_indices([10, 12], 3) is None
