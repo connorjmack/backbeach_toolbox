@@ -191,7 +191,7 @@ def _make_gif(
 
     with imageio.get_writer(output_path, mode="I", duration=1 / fps) as writer:
         for idx in range(0, len(survey_dates), frame_step):
-            fig, ax = plt.subplots(figsize=(7.5, 7.5), dpi=dpi)
+            fig, ax = plt.subplots(figsize=(6.5, 8.0), dpi=dpi)
             ax.set_aspect("equal", "box")
             ax.set_facecolor("#f7f7f4")
 
