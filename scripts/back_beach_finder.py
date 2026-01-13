@@ -343,6 +343,7 @@ def main():
 
     args = parser.parse_args()
 
+    print(f"Loading MAT file: {args.mat_file}")
     mat_data = load_mat_file(args.mat_file)
 
     cliff_east = np.asarray(mat_data.get("CliffToe_East_Corrected"))
@@ -352,6 +353,7 @@ def main():
 
     dates_num, dem_files = extract_dem_list(mat_data)
     survey_dates = [matlab_datenum_to_datetime(dn) for dn in dates_num]
+    print(f"Loaded {len(survey_dates)} surveys and {len(dem_files)} DEM entries")
 
     sl_record = np.asarray(mat_data.get("SL_Record"))
     if sl_record.size == 0:
@@ -360,6 +362,7 @@ def main():
     tide_levels = sl_record[:, 1]
 
     daily_tide = compute_daily_high_tide(tide_times, tide_levels, method=args.tide_method)
+    print(f"Loaded {len(tide_times)} tide records; {len(daily_tide)} daily values")
 
     n_surveys = len(survey_dates)
     if cliff_east.shape[0] != n_surveys and cliff_east.shape[1] == n_surveys:
@@ -374,9 +377,11 @@ def main():
     import geopandas as gpd
     import rasterio
 
+    print(f"Loading transects: {args.transects}")
     transects_gdf = gpd.read_file(args.transects)
     if transects_gdf.empty:
         raise ValueError("Transects shapefile is empty")
+    print(f"Loaded {len(transects_gdf)} transects")
 
     if args.transect_id_field:
         transect_ids = transects_gdf[args.transect_id_field].tolist()
@@ -405,8 +410,13 @@ def main():
             dem_path = os.path.join(dem_base, dem_path)
 
         if not os.path.exists(dem_path):
-            print(f"Skipping survey {survey_idx}: DEM not found at {dem_path}")
+            print(f"Skipping survey {survey_idx} ({survey_date.date()}): DEM not found at {dem_path}")
             continue
+
+        print(
+            f"Survey {survey_idx + 1}/{len(survey_dates)} "
+            f"{survey_date.date()} tide={float(tide_level):.3f} DEM={dem_path}"
+        )
 
         with rasterio.open(dem_path) as ds:
             dem_crs = ds.crs
