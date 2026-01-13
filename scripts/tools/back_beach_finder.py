@@ -330,7 +330,7 @@ def main():
         "--tide-method",
         choices=["max", "mean"],
         default="mean",
-        help="Daily tide aggregation: max (daily high tide) or mean",
+        help="(Deprecated) Daily tide aggregation; current workflow always uses daily mean of MHT",
     )
     parser.add_argument(
         "--allow-nearest-tide-day",
@@ -365,11 +365,35 @@ def main():
     sl_record = np.asarray(mat_data.get("SL_Record"))
     if sl_record.size == 0:
         raise KeyError("SL_Record not found in .mat file")
-    tide_times = [matlab_datenum_to_datetime(dn) for dn in sl_record[:, 0]]
-    tide_levels = sl_record[:, 1]
 
-    daily_tide = compute_daily_high_tide(tide_times, tide_levels, method=args.tide_method)
-    print(f"Loaded {len(tide_times)} tide records; {len(daily_tide)} daily values")
+    mht = mat_data.get("MHT")
+    if mht is None:
+        raise KeyError("MHT not found in .mat file (required for mean high tide protocol)")
+    mht_vals = np.asarray(mht).squeeze()
+    if mht_vals.size != sl_record.shape[0]:
+        raise ValueError(
+            "MHT length does not match SL_Record rows. "
+            f"MHT size: {mht_vals.size}, SL_Record rows: {sl_record.shape[0]}"
+        )
+
+    tide_times = np.array([matlab_datenum_to_datetime(dn) for dn in sl_record[:, 0]], dtype=object)
+    tide_levels = pd.to_numeric(mht_vals, errors="coerce")
+
+    valid_mask = pd.notna(tide_times) & np.isfinite(tide_levels)
+    dropped = len(tide_times) - valid_mask.sum()
+    if dropped > 0:
+        print(f"Warning: dropped {dropped} tide records with NaN/invalid time or MHT")
+
+    tide_times_valid = tide_times[valid_mask]
+    tide_levels_valid = tide_levels[valid_mask]
+
+    if args.tide_method != "mean":
+        print("Note: --tide-method is ignored; using daily mean of MHT.")
+
+    daily_tide = compute_daily_high_tide(tide_times_valid, tide_levels_valid, method="mean")
+    if daily_tide.empty:
+        raise RuntimeError("No valid daily tide values after filtering NaNs in MHT/SL_Record.")
+    print(f"Loaded {len(tide_times)} tide records; {len(daily_tide)} daily mean MHT values")
 
     n_surveys = len(survey_dates)
     if cliff_east.shape[0] != n_surveys and cliff_east.shape[1] == n_surveys:

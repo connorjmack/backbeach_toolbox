@@ -135,18 +135,6 @@ def _order_transects(gdf, transect_ids, id_field):
     return [mapping.get(tid) for tid in transect_ids]
 
 
-def _sort_by_numeric_id(transect_ids, geoms, col_indices):
-    try:
-        ids_num = np.asarray(transect_ids, dtype=float)
-    except Exception:
-        return transect_ids, geoms, col_indices
-    order = np.argsort(ids_num, kind="stable")
-    transect_ids_sorted = [transect_ids[i] for i in order]
-    geoms_sorted = [geoms[i] for i in order]
-    col_sorted = [col_indices[i] for i in order]
-    return transect_ids_sorted, geoms_sorted, col_sorted
-
-
 def _tide_point_from_width(line, cliff_point, width, direction="auto"):
     if line is None or cliff_point is None:
         return None
@@ -402,8 +390,6 @@ def main():
                 f"Cliff columns: {cliff_east.shape[1]}, Transects: {len(transect_geoms)}"
             )
         col_indices = list(range(len(transect_geoms)))
-
-    transect_ids, transect_geoms, col_indices = _sort_by_numeric_id(transect_ids, transect_geoms, col_indices)
 
     bounds = gdf.total_bounds
     gif_path = os.path.join(args.output_dir, args.gif_name)
