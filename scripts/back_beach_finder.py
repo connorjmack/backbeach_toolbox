@@ -302,9 +302,14 @@ def main():
         help="Path to transects shapefile",
     )
     parser.add_argument(
-        "--output-csv",
-        default="data/processed/back_beach_widths.csv",
-        help="Output CSV path",
+        "--output-npz",
+        default="data/processed/back_beach_widths.npz",
+        help="Output NPZ path for width matrices",
+    )
+    parser.add_argument(
+        "--output-mat",
+        default="data/processed/back_beach_widths.mat",
+        help="Output MAT path for width matrices",
     )
     parser.add_argument(
         "--spacing-m",
@@ -378,7 +383,8 @@ def main():
         id_field = next((f for f in id_field_candidates if f in transects_gdf.columns), None)
         transect_ids = transects_gdf[id_field].tolist() if id_field else list(range(len(transects_gdf)))
 
-    rows = []
+    width_along = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
+    width_euclid = np.full((n_surveys, cliff_east.shape[1]), np.nan, dtype=float)
 
     dem_base = args.dem_base_dir or os.path.dirname(os.path.abspath(args.mat_file))
 
@@ -439,33 +445,42 @@ def main():
                     continue
 
                 cross_point = _point_from_xy(cross)
-                width_along = abs(geom.project(cross_point) - geom.project(cliff_point))
-                width_euclid = np.hypot(cross[0] - cliff_x, cross[1] - cliff_y)
+                width_along_val = abs(geom.project(cross_point) - geom.project(cliff_point))
+                width_euclid_val = np.hypot(cross[0] - cliff_x, cross[1] - cliff_y)
 
-                rows.append(
-                    {
-                        "survey_index": survey_idx,
-                        "survey_date": survey_date.date().isoformat(),
-                        "tide_date": tide_date.isoformat(),
-                        "tide_level": float(tide_level),
-                        "transect_id": tran_id,
-                        "cliff_x": float(cliff_x),
-                        "cliff_y": float(cliff_y),
-                        "tide_x": float(cross[0]),
-                        "tide_y": float(cross[1]),
-                        "width_along_m": float(width_along),
-                        "width_euclid_m": float(width_euclid),
-                        "dem_path": dem_path,
-                    }
-                )
+                width_along[survey_idx, col_idx] = width_along_val
+                width_euclid[survey_idx, col_idx] = width_euclid_val
 
-    if not rows:
+    if np.isnan(width_along).all() and np.isnan(width_euclid).all():
         raise RuntimeError("No beach widths were computed. Check inputs and parameters.")
 
-    os.makedirs(os.path.dirname(args.output_csv), exist_ok=True)
-    out_df = pd.DataFrame(rows)
-    out_df.to_csv(args.output_csv, index=False)
-    print(f"Wrote {len(out_df)} rows to {args.output_csv}")
+    os.makedirs(os.path.dirname(args.output_npz), exist_ok=True)
+    np.savez(
+        args.output_npz,
+        width_along_transect_m=width_along,
+        width_euclid_m=width_euclid,
+        survey_dates=np.array([d.date().isoformat() for d in survey_dates]),
+        transect_ids=np.asarray(transect_ids),
+    )
+    print(f"Wrote width matrices to {args.output_npz}")
+
+    try:
+        from scipy.io import savemat
+    except Exception as exc:
+        raise RuntimeError("scipy is required to write .mat files. Install with: pip install scipy") from exc
+
+    os.makedirs(os.path.dirname(args.output_mat), exist_ok=True)
+    savemat(
+        args.output_mat,
+        {
+            "width_along_transect_m": width_along,
+            "width_euclid_m": width_euclid,
+            "survey_dates": np.array([d.date().isoformat() for d in survey_dates], dtype=object),
+            "transect_ids": np.asarray(transect_ids),
+        },
+    )
+    print(f"Wrote width matrices to {args.output_mat}")
+
 
 
 if __name__ == "__main__":
