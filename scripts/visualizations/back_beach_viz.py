@@ -210,9 +210,8 @@ def _make_gif(
             ax.legend(loc="upper right", frameon=False)
 
             fig.canvas.draw()
-            width, height = fig.canvas.get_width_height()
-            frame = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-            frame = frame.reshape((height, width, 3))
+            frame = np.asarray(fig.canvas.buffer_rgba())
+            frame = frame[..., :3]  # drop alpha channel
             writer.append_data(frame)
             plt.close(fig)
 
