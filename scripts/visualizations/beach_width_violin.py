@@ -67,6 +67,7 @@ def _plot_violin(ax, values, title, color, show_ylabel):
 
     q1, q3 = np.nanpercentile(finite_values, [25, 75])
     median_val = float(np.nanmedian(finite_values))
+    mean_val = float(np.nanmean(finite_values))
     iqr = q3 - q1
     whisker_low = q1 - 1.5 * iqr
     whisker_high = q3 + 1.5 * iqr
@@ -92,11 +93,32 @@ def _plot_violin(ax, values, title, color, show_ylabel):
         )
     )
     ax.plot(x_center, median_val, marker="o", color="#111111", markersize=6.5, zorder=5)
+    ax.plot(x_center, mean_val, marker="D", color="#111111", markersize=5.5, zorder=5)
+
+    label_x = 0.34
+    arrow = dict(arrowstyle="-", color="#111111", lw=1.1, shrinkA=0, shrinkB=0)
+    ax.annotate(f"Max (Q3 + 1.5*IQR)\n{whisker_max:.2f} m", xy=(x_center, whisker_max), xytext=(label_x, whisker_max),
+                textcoords="data", ha="left", va="center", arrowprops=arrow)
+    ax.annotate(f"Q3 (75th)\n{q3:.2f} m", xy=(x_center, q3), xytext=(label_x, q3),
+                textcoords="data", ha="left", va="center", arrowprops=arrow)
+    ax.annotate(f"Median\n{median_val:.2f} m", xy=(x_center, median_val), xytext=(label_x, median_val),
+                textcoords="data", ha="left", va="center", arrowprops=arrow)
+    ax.annotate(f"Mean\n{mean_val:.2f} m", xy=(x_center, mean_val), xytext=(label_x, mean_val + (iqr * 0.12)),
+                textcoords="data", ha="left", va="center", arrowprops=arrow)
+    ax.annotate(f"Q1 (25th)\n{q1:.2f} m", xy=(x_center, q1), xytext=(label_x, q1),
+                textcoords="data", ha="left", va="center", arrowprops=arrow)
+    ax.annotate(f"Min (Q1 - 1.5*IQR)\n{whisker_min:.2f} m", xy=(x_center, whisker_min), xytext=(label_x, whisker_min),
+                textcoords="data", ha="left", va="center", arrowprops=arrow)
+
+    bracket_x = -0.32
+    ax.annotate("", xy=(bracket_x, q1), xytext=(bracket_x, q3),
+                arrowprops=dict(arrowstyle="|-|", lw=1.4, color="#111111"))
+    ax.text(bracket_x - 0.02, (q1 + q3) / 2, f"IQR\n{iqr:.2f} m", ha="right", va="center")
 
     ax.set_title(title, pad=10, fontweight="semibold")
     ax.set_xticks([])
     ax.set_xlabel("")
-    ax.set_xlim(-0.5, 0.5)
+    ax.set_xlim(-0.5, 0.55)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     if show_ylabel:
         ax.set_ylabel("Alongshore-averaged beach width (m)")
