@@ -12,6 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from matplotlib.patches import Rectangle
 
 
 def _load_widths(path):
@@ -61,33 +62,49 @@ def _plot_violin(ax, values, title, color, show_ylabel):
         linewidth=1.2,
         cut=0,
         saturation=0.9,
-        width=0.5,
-    )
-    sns.stripplot(
-        y=finite_values,
-        ax=ax,
-        color="#2f2f2f",
-        size=4.5,
-        alpha=0.4,
-        jitter=0.12,
-        linewidth=0,
+        width=0.6,
     )
 
-    mean_val = float(np.nanmean(finite_values))
+    q1, q3 = np.nanpercentile(finite_values, [25, 75])
     median_val = float(np.nanmedian(finite_values))
-    ax.axhline(mean_val, color=color, linestyle="--", linewidth=2.0, alpha=0.9, label=f"Mean: {mean_val:.2f} m")
-    ax.axhline(median_val, color="#222222", linestyle="-", linewidth=2.2, alpha=0.95, label=f"Median: {median_val:.2f} m")
+    iqr = q3 - q1
+    whisker_low = q1 - 1.5 * iqr
+    whisker_high = q3 + 1.5 * iqr
+    finite_sorted = np.sort(finite_values)
+    whisker_min = finite_sorted[finite_sorted >= whisker_low].min(initial=finite_sorted.min())
+    whisker_max = finite_sorted[finite_sorted <= whisker_high].max(initial=finite_sorted.max())
+
+    x_center = 0
+    whisker_width = 0.07
+    box_width = 0.16
+    ax.vlines(x_center, whisker_min, whisker_max, color="#111111", linewidth=2.0, zorder=3)
+    ax.hlines(whisker_min, x_center - whisker_width, x_center + whisker_width, color="#111111", linewidth=2.0, zorder=3)
+    ax.hlines(whisker_max, x_center - whisker_width, x_center + whisker_width, color="#111111", linewidth=2.0, zorder=3)
+    ax.add_patch(
+        Rectangle(
+            (x_center - box_width / 2, q1),
+            box_width,
+            q3 - q1,
+            facecolor="white",
+            edgecolor="#111111",
+            linewidth=1.8,
+            zorder=4,
+        )
+    )
+    ax.plot(x_center, median_val, marker="o", color="#111111", markersize=6.5, zorder=5)
 
     ax.set_title(title, pad=10, fontweight="semibold")
     ax.set_xticks([])
     ax.set_xlabel("")
-    ax.grid(axis="y", linestyle="--", alpha=0.35)
+    ax.set_xlim(-0.5, 0.5)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
     if show_ylabel:
         ax.set_ylabel("Alongshore-averaged beach width (m)")
     else:
         ax.set_ylabel("")
-    ax.legend(frameon=False, loc="lower right")
-    ymin, ymax = np.nanpercentile(finite_values, [1, 99])
+    ymin_data, ymax_data = np.nanpercentile(finite_values, [1, 99])
+    ymin = min(ymin_data, whisker_min, q1)
+    ymax = max(ymax_data, whisker_max, q3)
     pad = (ymax - ymin) * 0.08 if np.isfinite(ymax - ymin) else 1.0
     ax.set_ylim(ymin - pad, ymax + pad)
 
