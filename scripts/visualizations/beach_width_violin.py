@@ -97,23 +97,24 @@ def _plot_violin(ax, values, title, color, show_ylabel):
 
     label_x = 0.34
     arrow = dict(arrowstyle="-", color="#111111", lw=1.1, shrinkA=0, shrinkB=0)
+    label_fs = 9
     ax.annotate(f"Max (Q3 + 1.5*IQR)\n{whisker_max:.2f} m", xy=(x_center, whisker_max), xytext=(label_x, whisker_max),
-                textcoords="data", ha="left", va="center", arrowprops=arrow)
+                textcoords="data", ha="left", va="center", arrowprops=arrow, fontsize=label_fs)
     ax.annotate(f"Q3 (75th)\n{q3:.2f} m", xy=(x_center, q3), xytext=(label_x, q3),
-                textcoords="data", ha="left", va="center", arrowprops=arrow)
+                textcoords="data", ha="left", va="center", arrowprops=arrow, fontsize=label_fs)
     ax.annotate(f"Median\n{median_val:.2f} m", xy=(x_center, median_val), xytext=(label_x, median_val),
-                textcoords="data", ha="left", va="center", arrowprops=arrow)
+                textcoords="data", ha="left", va="center", arrowprops=arrow, fontsize=label_fs)
     ax.annotate(f"Mean\n{mean_val:.2f} m", xy=(x_center, mean_val), xytext=(label_x, mean_val + (iqr * 0.12)),
-                textcoords="data", ha="left", va="center", arrowprops=arrow)
+                textcoords="data", ha="left", va="center", arrowprops=arrow, fontsize=label_fs)
     ax.annotate(f"Q1 (25th)\n{q1:.2f} m", xy=(x_center, q1), xytext=(label_x, q1),
-                textcoords="data", ha="left", va="center", arrowprops=arrow)
+                textcoords="data", ha="left", va="center", arrowprops=arrow, fontsize=label_fs)
     ax.annotate(f"Min (Q1 - 1.5*IQR)\n{whisker_min:.2f} m", xy=(x_center, whisker_min), xytext=(label_x, whisker_min),
-                textcoords="data", ha="left", va="center", arrowprops=arrow)
+                textcoords="data", ha="left", va="center", arrowprops=arrow, fontsize=label_fs)
 
     bracket_x = -0.32
     ax.annotate("", xy=(bracket_x, q1), xytext=(bracket_x, q3),
                 arrowprops=dict(arrowstyle="|-|", lw=1.4, color="#111111"))
-    ax.text(bracket_x - 0.02, (q1 + q3) / 2, f"IQR\n{iqr:.2f} m", ha="right", va="center")
+    ax.text(bracket_x - 0.02, (q1 + q3) / 2, f"IQR\n{iqr:.2f} m", ha="right", va="center", fontsize=label_fs)
 
     ax.set_title(title, pad=10, fontweight="semibold")
     ax.set_xticks([])
